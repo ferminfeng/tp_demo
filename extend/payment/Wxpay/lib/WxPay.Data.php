@@ -667,6 +667,7 @@ class WxPayUnifiedOrder extends WxPayDataBase
         return array_key_exists('goods_tag', $this->values);
     }
 
+
     /**
      * 设置接收微信支付异步通知回调地址
      * @param string $value

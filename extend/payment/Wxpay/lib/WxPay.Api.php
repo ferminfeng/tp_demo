@@ -13,8 +13,10 @@ class WxPayApi
      *
      * 统一下单，WxPayUnifiedOrder中out_trade_no、body、total_fee、trade_type必填
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayUnifiedOrder $inputObj
-     * @param int $timeOut
+     * @param int               $timeOut
+     *
      * @throws WxPayException
      * @return 成功时返回，其他抛异常
      */
@@ -67,8 +69,10 @@ class WxPayApi
      *
      * 查询订单，WxPayOrderQuery中out_trade_no、transaction_id至少填一个
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayOrderQuery $inputObj
-     * @param int $timeOut
+     * @param int             $timeOut
+     *
      * @throws WxPayException
      * @return 成功时返回，其他抛异常
      */
@@ -98,8 +102,10 @@ class WxPayApi
      *
      * 关闭订单，WxPayCloseOrder中out_trade_no必填
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayCloseOrder $inputObj
-     * @param int $timeOut
+     * @param int             $timeOut
+     *
      * @throws WxPayException
      * @return 成功时返回，其他抛异常
      */
@@ -130,8 +136,10 @@ class WxPayApi
      * 申请退款，WxPayRefund中out_trade_no、transaction_id至少填一个且
      * out_refund_no、total_fee、refund_fee、op_user_id为必填参数
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayRefund $inputObj
-     * @param int $timeOut
+     * @param int         $timeOut
+     *
      * @throws WxPayException
      * @return 成功时返回，其他抛异常
      */
@@ -171,8 +179,10 @@ class WxPayApi
      * 用零钱支付的退款20分钟内到账，银行卡支付的退款3个工作日后重新查询退款状态。
      * WxPayRefundQuery中out_refund_no、out_trade_no、transaction_id、refund_id四个参数必填一个
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayRefundQuery $inputObj
-     * @param int $timeOut
+     * @param int              $timeOut
+     *
      * @throws WxPayException
      * @return 成功时返回，其他抛异常
      */
@@ -205,8 +215,10 @@ class WxPayApi
     /**
      * 下载对账单，WxPayDownloadBill中bill_date为必填参数
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayDownloadBill $inputObj
-     * @param int $timeOut
+     * @param int               $timeOut
+     *
      * @throws WxPayException
      * @return 成功时返回，其他抛异常
      */
@@ -228,6 +240,7 @@ class WxPayApi
         if (substr($response, 0, 5) == "<xml>") {
             return "";
         }
+
         return $response;
     }
 
@@ -237,8 +250,9 @@ class WxPayApi
      * 由商户收银台或者商户后台调用该接口发起支付。
      * WxPayWxPayMicroPay中body、out_trade_no、total_fee、auth_code参数必填
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayWxPayMicroPay $inputObj
-     * @param int $timeOut
+     * @param int                $timeOut
      */
     public static function micropay($inputObj, $timeOut = 10)
     {
@@ -274,8 +288,10 @@ class WxPayApi
      *
      * 撤销订单API接口，WxPayReverse中参数out_trade_no和transaction_id必须填写一个
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayReverse $inputObj
-     * @param int $timeOut
+     * @param int          $timeOut
+     *
      * @throws WxPayException
      */
     public static function reverse($inputObj, $timeOut = 6)
@@ -306,8 +322,10 @@ class WxPayApi
      * 测速上报，该方法内部封装在report中，使用时请注意异常流程
      * WxPayReport中interface_url、return_code、result_code、user_ip、execute_time_必填
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayReport $inputObj
-     * @param int $timeOut
+     * @param int         $timeOut
+     *
      * @throws WxPayException
      * @return 成功时返回，其他抛异常
      */
@@ -341,6 +359,7 @@ class WxPayApi
 
         $startTimeStamp = self::getMillisecond();//请求开始时间
         $response = self::postXmlCurl($xml, $url, false, $timeOut);
+
         return $response;
     }
 
@@ -348,8 +367,10 @@ class WxPayApi
      *
      * 生成二维码规则,模式一生成支付二维码
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayBizPayUrl $inputObj
-     * @param int $timeOut
+     * @param int            $timeOut
+     *
      * @throws WxPayException
      * @return 成功时返回，其他抛异常
      */
@@ -375,8 +396,10 @@ class WxPayApi
      * 该接口主要用于扫码原生支付模式一中的二维码链接转成短链接(weixin://wxpay/s/XXXXXX)，
      * 减小二维码数据量，提升扫描速度和精确度。
      * appid、mchid、spbill_create_ip、nonce_str不需要填入
+     *
      * @param WxPayShortUrl $inputObj
-     * @param int $timeOut
+     * @param int           $timeOut
+     *
      * @throws WxPayException
      * @return 成功时返回，其他抛异常
      */
@@ -403,35 +426,35 @@ class WxPayApi
     }
 
     /**
-     *
      * 支付结果通用通知
-     * @param function $callback
-     * 直接回调函数使用方法: notify(you_function);
-     * 回调类成员函数方法:notify(array($this, you_function));
-     * $callback  原型为：function function_name($data){}
+     *
+     * @param $msg
+     *
+     * @return array|bool
      */
-    public static function notify($callback, &$msg)
+    public static function notify(&$msg)
     {
         //获取通知的数据
         //$xml = $GLOBALS['HTTP_RAW_POST_DATA'];
         $xml = file_get_contents("php://input");
-        //如果返回成功则验证签名
         try {
             $result = WxPayResults::Init($xml);
         } catch (WxPayException $e) {
             $msg = $e->errorMessage();
+
             return false;
         }
 
-        //return call_user_func($callback, $result);
         return $result;
     }
 
     /**
      * 返回结果给微信服务器
+     *
      * @param $data
      */
-    public static function resultXmlToWx($data){
+    public static function resultXmlToWx($data)
+    {
         $notify = new WxPayNotifyReply();
 
         $notify->SetReturn_code($data['return_code']);
@@ -444,7 +467,9 @@ class WxPayApi
     /**
      *
      * 产生随机字符串，不长于32位
+     *
      * @param int $length
+     *
      * @return 产生的随机字符串
      */
     public static function getNonceStr($length = 32)
@@ -454,11 +479,13 @@ class WxPayApi
         for ($i = 0; $i < $length; $i++) {
             $str .= substr($chars, mt_rand(0, strlen($chars) - 1), 1);
         }
+
         return $str;
     }
 
     /**
      * 直接输出xml
+     *
      * @param string $xml
      */
     public static function replyNotify($xml)
@@ -469,9 +496,10 @@ class WxPayApi
     /**
      *
      * 上报数据， 上报的时候将屏蔽所有异常流程
+     *
      * @param string $usrl
-     * @param int $startTimeStamp
-     * @param array $data
+     * @param int    $startTimeStamp
+     * @param array  $data
      */
     private static function reportCostTime($url, $startTimeStamp, $data)
     {
@@ -533,10 +561,11 @@ class WxPayApi
     /**
      * 以post方式提交xml到对应的接口url
      *
-     * @param string $xml 需要post的xml数据
-     * @param string $url url
-     * @param bool $useCert 是否需要证书，默认不需要
-     * @param int $second url执行超时时间，默认30s
+     * @param string $xml     需要post的xml数据
+     * @param string $url     url
+     * @param bool   $useCert 是否需要证书，默认不需要
+     * @param int    $second  url执行超时时间，默认30s
+     *
      * @throws WxPayException
      */
     private static function postXmlCurl($xml, $url, $useCert = false, $second = 30)
@@ -576,6 +605,7 @@ class WxPayApi
         //返回结果
         if ($data) {
             curl_close($ch);
+
             return $data;
         } else {
             $error = curl_errno($ch);
@@ -594,6 +624,7 @@ class WxPayApi
         $time = $time[1] . ($time[0] * 1000);
         $time2 = explode(".", $time);
         $time = $time2[0];
+
         return $time;
     }
 }

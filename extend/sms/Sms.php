@@ -64,6 +64,10 @@ class Sms
             $czPassword = $this->czPassword;
         }
 
+        if(!$czNumber || !$czPassword){
+            return ['code' => '-10001', 'msg' => '发送短信帐号不存在', 'data' => ''];
+        }
+
         $post_data = "action=send&userid=&account=" . $czNumber . "&password=" . $czPassword . "&mobile=" . $phone . "&sendTime=&content=" . rawurlencode($content) . "&extno=" . $this->czExtno;
 
         $gets = $this->Post($post_data, $this->czTarget);
@@ -71,10 +75,12 @@ class Sms
         $xml = simplexml_load_string($gets);
         $send_result = json_decode(json_encode($xml), TRUE);
 
-        $result = '-1'; //发送失败
-
+        //发送成功
         if ($send_result['returnstatus'] == 'Success') {
-            $result = '0'; //发送成功
+            $result = ['code' => '0', 'msg' => '', 'data' => $send_result];
+        }else{
+            //发送失败
+            $result = ['code' => '-1', 'msg' => '', 'data' => $send_result];
         }
 
         return $result;
@@ -122,6 +128,9 @@ class Sms
      */
     public function mdSendSms($phone, $content)
     {
+        if(!$this->serialNumber || !$this->password){
+            return ['code' => '-10001', 'msg' => '发送短信帐号不存在', 'data' => ''];
+        }
         $flag = 0;
 
         //要post的数据
@@ -172,7 +181,8 @@ class Sms
         $result = explode("-", $line);
         fclose($fp);
 
-        return (count($result) > 1) ? $line : 0;
+        $code = (count($result) > 1) ? $line : 0;
+        return ['code' => $code, 'msg' => '', 'data' => ''];
     }
 
     /**
@@ -184,6 +194,9 @@ class Sms
      */
     public function mdSendSmsForeign($phone, $content)
     {
+        if(!$this->serialNumber || !$this->password){
+            return ['code' => '-10001', 'msg' => '发送短信帐号不存在', 'data' => ''];
+        }
 
         $sn = $this->serialNumber; ////替换成您自己的序列号
         $pwd = strtoupper(md5($this->serialNumber . $this->password)); //此处密码需要加密 加密方式为 md5(sn+password) 32位大写
@@ -206,7 +219,7 @@ class Sms
         $retult = str_replace("<string xmlns=\"http://tempuri.org/\">", "", $retult);
         $retult = str_replace("</string>", "", $retult);
 
-        return $retult;
+        return ['code' => $retult, 'msg' => '', 'data' => ''];
     }
 
     /**

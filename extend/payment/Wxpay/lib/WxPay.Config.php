@@ -8,7 +8,7 @@ namespace payment\Wxpay;
 
 define('APICLIENT_CERT', EXTEND_PATH . 'payment' . DS . 'Wxpay' . DS . 'cert' . DS . 'apiclient_cert.pem');
 define('APICLIENT_KEY', EXTEND_PATH . 'payment' . DS . 'Wxpay' . DS . 'cert' . DS . 'apiclient_key.pem');
-define('PAY_NOTIFY_URL', config('pay_notify_url') . config('wxPay_notify_path'));
+define('PAY_NOTIFY_URL', config('pay_notify_url') . config('wxPay_app_notify_path'));
 
 define('CONFIG_APPID', config('WxPayConfig')['app_app_id']);
 define('CONFIG_MCHID', config('WxPayConfig')['app_mch_id']);

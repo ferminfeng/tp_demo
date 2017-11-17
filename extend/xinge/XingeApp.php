@@ -1,6 +1,8 @@
 <?php
 namespace xinge;
 
+use \think\Log;
+
 /*
  * Copyright ? 1998 - 2014 Tencent. All Rights Reserved. 腾讯公司 版权所有
  */
@@ -9,8 +11,9 @@ define('ACCESS_ID_IOS', config('XinGeConfig')['access_id_ios']);
 define('ACCESS_KEY_IOS', config('XinGeConfig')['access_key_ios']);
 define('SECRET_ID_IOS', config('XinGeConfig')['secret_key_ios']);
 define('ACCESS_ID_ANDROID', config('XinGeConfig')['access_id_android']);
-define('ACCESS_KEY_ANDROID', config('XinGeConfig')['access_id_android']);
-define('SECRET_ID_ANDROID', config('XinGeConfig')['access_id_android']);
+define('ACCESS_KEY_ANDROID', config('XinGeConfig')['access_key_android']);
+define('SECRET_ID_ANDROID', config('XinGeConfig')['secret_key_android']);
+
 class XingeApp
 {
 
@@ -57,13 +60,15 @@ class XingeApp
     /**
      * 单个设备下发透传消息
      * 注：透传消息默认不展示
-     * @param string $type 设备类型 ios/android
-     * @param string $title 推送标题
-     * @param string $content 推送描述
-     * @param string $token 推送设备device_token
-     * @param array $custom 自定义消息体
-     * @param int $environment 向iOS设备推送时必填，1表示推送生产环境；2表示推送开发环境。推送Android平台不填或填0
-     * @param int $ExpireTime 消息离线存储多久，单位为秒，最长存储时间 3 天。选填，默认为 3天， 设置为 0 等同于使用默认值
+     *
+     * @param string $type        设备类型 ios/android
+     * @param string $title       推送标题
+     * @param string $content     推送描述
+     * @param string $token       推送设备device_token
+     * @param array  $custom      自定义消息体
+     * @param int    $environment 向iOS设备推送时必填，1表示推送生产环境；2表示推送开发环境。推送Android平台不填或填0
+     * @param int    $ExpireTime  消息离线存储多久，单位为秒，最长存储时间 3 天。选填，默认为 3天， 设置为 0 等同于使用默认值
+     *
      * @return array|mixed
      */
     public function pushSingleDeviceApi($type = '', $title = '', $content = '', $token = '', $custom = [], $environment = 2, $ExpireTime = 86400)
@@ -81,25 +86,28 @@ class XingeApp
         }
 
         $ret = $this->PushSingleDevice($token, $message, $environment);
+
         return $ret;
     }
 
     /**
      * 大批量下发给设备
      * 注：透传消息默认不展示
-     * @param string $type 设备类型 ios/android
-     * @param string $title 推送标题
-     * @param string $content 推送描述
-     * @param array $tokenList 推送设备device_token列表
-     * @param array $custom 自定义消息体
-     * @param int $environment 向iOS设备推送时必填，1表示推送生产环境；2表示推送开发环境。推送Android平台不填或填0
-     * @param int $ExpireTime 消息离线存储多久，单位为秒，最长存储时间 3 天。选填，默认为 3天， 设置为 0 等同于使用默认值
+     *
+     * @param string $type        设备类型 ios/android
+     * @param string $title       推送标题
+     * @param string $content     推送描述
+     * @param array  $tokenList   推送设备device_token列表
+     * @param array  $custom      自定义消息体
+     * @param int    $environment 向iOS设备推送时必填，1表示推送生产环境；2表示推送开发环境。推送Android平台不填或填0
+     * @param int    $ExpireTime  消息离线存储多久，单位为秒，最长存储时间 3 天。选填，默认为 3天， 设置为 0 等同于使用默认值
+     *
      * @return array|mixed ['ret_code','err_msg','result' => ['push_id']]
      */
     public function pushDeviceListApi($type = '', $title = '', $content = '', $tokenList = [], $custom = [], $environment = 2, $ExpireTime = 86400)
     {
-        if (!in_array($type, ['ios', 'android']) || $title == '' || $content == '' || !$tokenList || !$custom || !in_array($environment, [0, 1, 2])) {
-            return array('ret_code' => -1, 'err_msg' => '参数错误');
+        if (!in_array($type, ['ios', 'android']) || $title == '' || !$tokenList || !$custom || !in_array($environment, [0, 1, 2])) {
+            return ['ret_code' => -1, 'err_msg' => '参数错误'];
         }
 
         //区分构建ios/android消息
@@ -115,20 +123,37 @@ class XingeApp
         if (!($ret['ret_code'] === 0)) {
             return $ret;
         } else {
-            $result = [];
+            $result = $successPush = [];
+
+            //分批推送是否存在推送失败
+            $is_fail = FALSE;
 
             //单次发送token不超过1000个。
             if (count($tokenList) > 1000) {
+                //1000条一组分批推送
                 $tokenListChunk = array_chunk($tokenList, '1000');
                 foreach ($tokenListChunk as $val) {
-                    array_push($result, $this->PushDeviceListMultiple($ret['result']['push_id'], $val));
+                    $resultChunk = $this->PushDeviceListMultiple($ret['result']['push_id'], $val);
+                    if ($resultChunk && $resultChunk['ret_code'] == 0) {
+                        //分批推送只要有一次成功就算成功，并记录具体哪些token推送成功
+                        $result = $resultChunk;
+                        $successPush = array_merge($successPush, $val);
+                    } else {
+                        $is_fail = true;
+                    }
                 }
             } else {
+                //直接推送
                 $result = $this->PushDeviceListMultiple($ret['result']['push_id'], $tokenList);
             }
 
-            $result['result']['push_id'] = $ret['result']['push_id'];
-            return $result;
+            //部分推送成功时记录推送成功token列表
+            $ret['success_push'] = $is_fail ? $successPush : [];
+
+            //推送状态 0:成功 其他失败
+            $ret['ret_code'] = isset($result['ret_code']) ? $result['ret_code'] : '-2';
+
+            return $ret;
         }
     }
 
@@ -137,18 +162,19 @@ class XingeApp
      * 注：透传消息默认不展示
      * 两次调用之间的时间间隔不能小于3秒
      *
-     * @param string $type 设备类型 ios/android
-     * @param string $title 推送标题
-     * @param string $content 推送描述
-     * @param array $custom 自定义消息体
-     * @param int $environment 向iOS设备推送时必填，1表示推送生产环境；2表示推送开发环境。推送Android平台不填或填0
-     * @param int $ExpireTime 消息离线存储多久，单位为秒，最长存储时间 3 天。选填，默认为 3天， 设置为 0 等同于使用默认值
+     * @param string $type        设备类型 ios/android
+     * @param string $title       推送标题
+     * @param string $content     推送描述
+     * @param array  $custom      自定义消息体
+     * @param int    $environment 向iOS设备推送时必填，1表示推送生产环境；2表示推送开发环境。推送Android平台不填或填0
+     * @param int    $ExpireTime  消息离线存储多久，单位为秒，最长存储时间 3 天。选填，默认为 3天， 设置为 0 等同于使用默认值
+     *
      * @return array|mixed
      */
     public function pushAllDevicesApi($type = '', $title = '', $content = '', $custom = [], $environment = 2, $ExpireTime = 86400)
     {
         if (!in_array($type, ['ios', 'android']) || $title == '' || $content == '' || !$custom || !in_array($environment, [0, 1, 2])) {
-            return array('ret_code' => -1, 'err_msg' => '参数错误');
+            return ['ret_code' => -1, 'err_msg' => '参数错误'];
         }
 
         //区分构建ios/android消息
@@ -160,14 +186,17 @@ class XingeApp
         }
 
         $ret = $this->PushAllDevices(0, $message, $environment);
+
         return $ret;
     }
 
     /**
      * 构建IOS消息
+     *
      * @param string $title
-     * @param int $ExpireTime
-     * @param array $custom
+     * @param int    $ExpireTime
+     * @param array  $custom
+     *
      * @return MessageIOS
      */
     private function pushMessageIOS($title = '', $ExpireTime = 86400, $custom = [])
@@ -199,10 +228,12 @@ class XingeApp
 
     /**
      * 构建Android消息
+     *
      * @param string $title
      * @param string $content
-     * @param array $custom
-     * @param int $ExpireTime
+     * @param array  $custom
+     * @param int    $ExpireTime
+     *
      * @return Message
      */
     private function pushMessageAndroid($title = '', $content = '', $custom = [], $ExpireTime = 86400)
@@ -255,13 +286,14 @@ class XingeApp
         $action->setComfirmOnUrl(1);
         $mess->setAction($action);
 
-        $custom = array('key1' => 'value1', 'key2' => 'value2');
+        $custom = ['key1' => 'value1', 'key2' => 'value2'];
         $mess->setCustom($custom); //用户自定义 key=>value,用于用户透传消息， 此项内容将记入消息字符数
         //表示允许推送的时间段， (开始时，开始分，结束时，结束分) 如需设置多个时间段，请实例化多个
         $acceptTime1 = new \xinge\TimeInterval(0, 0, 23, 59);
         $mess->addAcceptTime($acceptTime1);
 
         $ret = $push->PushSingleDevice('token', $mess);
+
         return ($ret);
     }
 
@@ -284,6 +316,7 @@ class XingeApp
         $mess->setStyle($style);
         $mess->setAction($action);
         $ret = $push->PushSingleDevice('token', $mess);
+
         return ($ret);
     }
 
@@ -297,6 +330,7 @@ class XingeApp
         $mess->setContent('content');
         $mess->setType(Message::TYPE_MESSAGE);
         $ret = $push->PushSingleAccount(0, 'joelliu', $mess);
+
         return ($ret);
     }
 
@@ -309,8 +343,9 @@ class XingeApp
         $mess->setTitle('title');
         $mess->setContent('content');
         $mess->setType(Message::TYPE_MESSAGE);
-        $accountList = array('joelliu');
+        $accountList = ['joelliu'];
         $ret = $push->PushAccountList(0, $accountList, $mess);
+
         return ($ret);
     }
 
@@ -329,11 +364,12 @@ class XingeApp
         //$mess->setAlert(array('key1'=>'value1'));
         $mess->setBadge(1);//设置角标数值
         $mess->setSound("default");//推送声音使用默认声音
-        $custom = array('key1' => 'value1', 'key2' => 'value2');
+        $custom = ['key1' => 'value1', 'key2' => 'value2'];
         $mess->setCustom($custom);
         $acceptTime1 = new \xinge\TimeInterval(0, 0, 23, 59);
         $mess->addAcceptTime($acceptTime1);
         $ret = $push->PushSingleAccount(0, '714930878', $mess, $push::IOSENV_DEV);
+
         return $ret;
     }
 
@@ -346,8 +382,9 @@ class XingeApp
         $mess->setTitle('title');
         $mess->setContent('content');
         $mess->setType(Message::TYPE_MESSAGE);
-        $tagList = array('Demo3');
+        $tagList = ['Demo3'];
         $ret = $push->PushTags(0, $tagList, 'OR', $mess);
+
         return ($ret);
     }
 
@@ -355,8 +392,9 @@ class XingeApp
     public function DemoQueryPushStatus()
     {
         $push = new XingeApp(000, 'secret_key');
-        $pushIdList = array('31', '32');
+        $pushIdList = ['31', '32'];
         $ret = $push->QueryPushStatus($pushIdList);
+
         return ($ret);
     }
 
@@ -365,6 +403,7 @@ class XingeApp
     {
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->QueryDeviceCount();
+
         return ($ret);
     }
 
@@ -373,6 +412,7 @@ class XingeApp
     {
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->QueryTags(0, 100);
+
         return ($ret);
     }
 
@@ -381,6 +421,7 @@ class XingeApp
     {
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->QueryTagTokenNum("tag");
+
         return ($ret);
     }
 
@@ -389,6 +430,7 @@ class XingeApp
     {
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->QueryTokenTags("token");
+
         return ($ret);
     }
 
@@ -397,6 +439,7 @@ class XingeApp
     {
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->CancelTimingPush("32");
+
         return ($ret);
     }
 
@@ -404,12 +447,13 @@ class XingeApp
     public function DemoBatchSetTag()
     {
         // 切记把这里的示例tag和示例token修改为你的真实tag和真实token
-        $pairs = array();
+        $pairs = [];
         array_push($pairs, new TagTokenPair("tag1", "token00000000000000000000000000000000001"));
         array_push($pairs, new TagTokenPair("tag1", "token00000000000000000000000000000000001"));
 
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->BatchSetTag($pairs);
+
         return $ret;
     }
 
@@ -417,12 +461,13 @@ class XingeApp
     public function DemoBatchDelTag()
     {
         // 切记把这里的示例tag和示例token修改为你的真实tag和真实token
-        $pairs = array();
+        $pairs = [];
         array_push($pairs, new TagTokenPair("tag1", "token00000000000000000000000000000000001"));
         array_push($pairs, new TagTokenPair("tag1", "token00000000000000000000000000000000001"));
 
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->BatchDelTag($pairs);
+
         return $ret;
     }
 
@@ -440,11 +485,12 @@ class XingeApp
         if (!($ret['ret_code'] === 0))
             return $ret;
         else {
-            $result = array();
-            $accountList1 = array('joelliu', 'joelliu2', 'joelliu3'); //单次发送token不超过1000个。
+            $result = [];
+            $accountList1 = ['joelliu', 'joelliu2', 'joelliu3']; //单次发送token不超过1000个。
             array_push($result, $push->PushAccountListMultiple($ret['result']['push_id'], $accountList1));
-            $accountList2 = array('joelliu4', 'joelliu5', 'joelliu6');
+            $accountList2 = ['joelliu4', 'joelliu5', 'joelliu6'];
             array_push($result, $push->PushAccountListMultiple($ret['result']['push_id'], $accountList2));
+
             return ($result);
         }
     }
@@ -454,6 +500,7 @@ class XingeApp
     {
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->QueryInfoOfToken("token");
+
         return ($ret);
     }
 
@@ -462,6 +509,7 @@ class XingeApp
     {
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->QueryTokensOfAccount("nickName");
+
         return ($ret);
     }
 
@@ -470,6 +518,7 @@ class XingeApp
     {
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->DeleteTokenOfAccount("nickName", "token");
+
         return ($ret);
     }
 
@@ -478,6 +527,7 @@ class XingeApp
     {
         $push = new XingeApp(000, 'secret_key');
         $ret = $push->DeleteAllTokensOfAccount("nickName");
+
         return ($ret);
     }
 
@@ -500,6 +550,7 @@ class XingeApp
         $action->setActionType(ClickAction::TYPE_ACTIVITY);
         $mess->setAction($action);
         $ret = $push->PushSingleDevice($token, $mess);
+
         return $ret;
     }
 
@@ -512,6 +563,7 @@ class XingeApp
         $mess = new MessageIOS();
         $mess->setAlert($content);
         $ret = $push->PushSingleDevice($token, $mess, $environment);
+
         return $ret;
     }
 
@@ -530,6 +582,7 @@ class XingeApp
         $action->setActionType(ClickAction::TYPE_ACTIVITY);
         $mess->setAction($action);
         $ret = $push->PushSingleAccount(0, $account, $mess);
+
         return $ret;
     }
 
@@ -542,6 +595,7 @@ class XingeApp
         $mess = new MessageIOS();
         $mess->setAlert($content);
         $ret = $push->PushSingleAccount(0, $account, $mess, $environment);
+
         return $ret;
     }
 
@@ -560,6 +614,7 @@ class XingeApp
         $action->setActionType(ClickAction::TYPE_ACTIVITY);
         $mess->setAction($action);
         $ret = $push->PushAllDevices(0, $mess);
+
         return $ret;
     }
 
@@ -572,6 +627,7 @@ class XingeApp
         $mess = new MessageIOS();
         $mess->setAlert($content);
         $ret = $push->PushAllDevices(0, $mess, $environment);
+
         return $ret;
     }
 
@@ -589,7 +645,8 @@ class XingeApp
         $action = new ClickAction();
         $action->setActionType(ClickAction::TYPE_ACTIVITY);
         $mess->setAction($action);
-        $ret = $push->PushTags(0, array(0 => $tag), 'OR', $mess);
+        $ret = $push->PushTags(0, [0 => $tag], 'OR', $mess);
+
         return $ret;
     }
 
@@ -601,7 +658,8 @@ class XingeApp
         $push = new XingeApp($accessId, $secretKey);
         $mess = new MessageIOS();
         $mess->setAlert($content);
-        $ret = $push->PushTags(0, array(0 => $tag), 'OR', $mess, $environment);
+        $ret = $push->PushTags(0, [0 => $tag], 'OR', $mess, $environment);
+
         return $ret;
     }
 
@@ -610,23 +668,25 @@ class XingeApp
      */
     public function PushSingleDevice($deviceToken, $message, $environment = 0)
     {
-        $ret = array('ret_code' => -1, 'err_msg' => 'message not valid');
+        $ret = ['ret_code' => -1, 'err_msg' => 'message not valid'];
 
         if (!($message instanceof Message) && !($message instanceof MessageIOS))
             return $ret;
         if (!$this->ValidateMessageType($message)) {
             $ret['err_msg'] = 'message type not fit accessId';
+
             return $ret;
         }
         if ($message instanceof MessageIOS) {
             if ($environment != XingeApp::IOSENV_DEV && $environment != XingeApp::IOSENV_PROD) {
                 $ret['err_msg'] = "ios message environment invalid";
+
                 return $ret;
             }
         }
         if (!$message->isValid())
             return $ret;
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['expire_time'] = $message->getExpireTime();
         $params['send_time'] = $message->getSendTime();
@@ -646,34 +706,40 @@ class XingeApp
      */
     public function PushSingleAccount($deviceType, $account, $message, $environment = 0)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_int($deviceType) || $deviceType < 0 || $deviceType > 5) {
             $ret['err_msg'] = 'deviceType not valid';
+
             return $ret;
         }
         if (!is_string($account) || empty($account)) {
             $ret['err_msg'] = 'account not valid';
+
             return $ret;
         }
         if (!($message instanceof Message) && !($message instanceof MessageIOS)) {
             $ret['err_msg'] = 'message is not android or ios';
+
             return $ret;
         }
         if (!$this->ValidateMessageType($message)) {
             $ret['err_msg'] = 'message type not fit accessId';
+
             return $ret;
         }
         if ($message instanceof MessageIOS) {
             if ($environment != XingeApp::IOSENV_DEV && $environment != XingeApp::IOSENV_PROD) {
                 $ret['err_msg'] = "ios message environment invalid";
+
                 return $ret;
             }
         }
         if (!$message->isValid()) {
             $ret['err_msg'] = 'message not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['expire_time'] = $message->getExpireTime();
         $params['send_time'] = $message->getSendTime();
@@ -694,34 +760,40 @@ class XingeApp
      */
     public function PushAccountList($deviceType, $accountList, $message, $environment = 0)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_int($deviceType) || $deviceType < 0 || $deviceType > 5) {
             $ret['err_msg'] = 'deviceType not valid';
+
             return $ret;
         }
         if (!is_array($accountList) || empty($accountList)) {
             $ret['err_msg'] = 'accountList not valid';
+
             return $ret;
         }
         if (!($message instanceof Message) && !($message instanceof MessageIOS)) {
             $ret['err_msg'] = 'message is not android or ios';
+
             return $ret;
         }
         if (!$this->ValidateMessageType($message)) {
             $ret['err_msg'] = 'message type not fit accessId';
+
             return $ret;
         }
         if ($message instanceof MessageIOS) {
             if ($environment != XingeApp::IOSENV_DEV && $environment != XingeApp::IOSENV_PROD) {
                 $ret['err_msg'] = "ios message environment invalid";
+
                 return $ret;
             }
         }
         if (!$message->isValid()) {
             $ret['err_msg'] = 'message not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['expire_time'] = $message->getExpireTime();
         if ($message instanceof Message)
@@ -741,9 +813,10 @@ class XingeApp
      */
     public function PushAllDevices($deviceType, $message, $environment = 0)
     {
-        $ret = array('ret_code' => -1, 'err_msg' => 'message not valid');
+        $ret = ['ret_code' => -1, 'err_msg' => 'message not valid'];
         if (!is_int($deviceType) || $deviceType < 0 || $deviceType > 5) {
             $ret['err_msg'] = 'deviceType not valid';
+
             return $ret;
         }
 
@@ -751,17 +824,19 @@ class XingeApp
             return $ret;
         if (!$this->ValidateMessageType($message)) {
             $ret['err_msg'] = 'message type not fit accessId';
+
             return $ret;
         }
         if ($message instanceof MessageIOS) {
             if ($environment != XingeApp::IOSENV_DEV && $environment != XingeApp::IOSENV_PROD) {
                 $ret['err_msg'] = "ios message environment invalid";
+
                 return $ret;
             }
         }
         if (!$message->isValid())
             return $ret;
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['expire_time'] = $message->getExpireTime();
         $params['send_time'] = $message->getSendTime();
@@ -777,6 +852,7 @@ class XingeApp
             $params['loop_interval'] = $message->getLoopInterval();
             $params['loop_times'] = $message->getLoopTimes();
         }
+
         //var_dump($params);
 
         return $this->callRestful(self::RESTAPI_PUSHALLDEVICE, $params);
@@ -788,17 +864,20 @@ class XingeApp
      */
     public function PushTags($deviceType, $tagList, $tagsOp, $message, $environment = 0)
     {
-        $ret = array('ret_code' => -1, 'err_msg' => 'message not valid');
+        $ret = ['ret_code' => -1, 'err_msg' => 'message not valid'];
         if (!is_int($deviceType) || $deviceType < 0 || $deviceType > 5) {
             $ret['err_msg'] = 'deviceType not valid';
+
             return $ret;
         }
         if (!is_array($tagList) || empty($tagList)) {
             $ret['err_msg'] = 'tagList not valid';
+
             return $ret;
         }
         if (!is_string($tagsOp) || ($tagsOp != 'AND' && $tagsOp != 'OR')) {
             $ret['err_msg'] = 'tagsOp not valid';
+
             return $ret;
         }
 
@@ -806,18 +885,20 @@ class XingeApp
             return $ret;
         if (!$this->ValidateMessageType($message)) {
             $ret['err_msg'] = 'message type not fit accessId';
+
             return $ret;
         }
         if ($message instanceof MessageIOS) {
             if ($environment != XingeApp::IOSENV_DEV && $environment != XingeApp::IOSENV_PROD) {
                 $ret['err_msg'] = "ios message environment invalid";
+
                 return $ret;
             }
         }
         if (!$message->isValid())
             return $ret;
 
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['expire_time'] = $message->getExpireTime();
         $params['send_time'] = $message->getSendTime();
@@ -844,26 +925,30 @@ class XingeApp
      */
     public function CreateMultipush($message, $environment = 0)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!($message instanceof Message) && !($message instanceof MessageIOS)) {
             $ret['err_msg'] = 'message is not android or ios';
+
             return $ret;
         }
         if (!$this->ValidateMessageType($message)) {
             $ret['err_msg'] = 'message type not fit accessId';
+
             return $ret;
         }
         if ($message instanceof MessageIOS) {
             if ($environment != XingeApp::IOSENV_DEV && $environment != XingeApp::IOSENV_PROD) {
                 $ret['err_msg'] = "ios message environment invalid";
+
                 return $ret;
             }
         }
         if (!$message->isValid()) {
             $ret['err_msg'] = 'message not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['expire_time'] = $message->getExpireTime();
         if ($message instanceof Message)
@@ -882,16 +967,18 @@ class XingeApp
     public function PushAccountListMultiple($pushId, $accountList)
     {
         $pushId = intval($pushId);
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if ($pushId <= 0) {
             $ret['err_msg'] = 'pushId not valid';
+
             return $ret;
         }
         if (!is_array($accountList) || empty($accountList)) {
             $ret['err_msg'] = 'accountList not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['push_id'] = $pushId;
         $params['account_list'] = json_encode($accountList);
@@ -907,16 +994,18 @@ class XingeApp
     {
         //$pushId = intval($pushId);
         $pushId = trim($pushId);
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if ($pushId <= 0) {
             $ret['err_msg'] = 'pushId not valid';
+
             return $ret;
         }
         if (!is_array($deviceList) || empty($deviceList)) {
             $ret['err_msg'] = 'deviceList not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['push_id'] = $pushId;
         $params['device_list'] = json_encode($deviceList);
@@ -927,20 +1016,22 @@ class XingeApp
 
     /**
      * 查询消息推送状态
+     *
      * @param array $pushIdList pushId(string)数组
      */
     public function QueryPushStatus($pushIdList)
     {
-        $ret = array('ret_code' => -1);
-        $idList = array();
+        $ret = ['ret_code' => -1];
+        $idList = [];
         if (!is_array($pushIdList) || empty($pushIdList)) {
             $ret['err_msg'] = 'pushIdList not valid';
+
             return $ret;
         }
         foreach ($pushIdList as $pushId) {
-            $idList[] = array('push_id' => $pushId);
+            $idList[] = ['push_id' => $pushId];
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['push_ids'] = json_encode($idList);
         $params['timestamp'] = time();
@@ -953,7 +1044,7 @@ class XingeApp
      */
     public function QueryDeviceCount()
     {
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['timestamp'] = time();
 
@@ -965,12 +1056,13 @@ class XingeApp
      */
     public function QueryTags($start = 0, $limit = 100)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_int($start) || !is_int($limit)) {
             $ret['err_msg'] = 'start or limit not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['start'] = $start;
         $params['limit'] = $limit;
@@ -984,12 +1076,13 @@ class XingeApp
      */
     public function QueryTagTokenNum($tag)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_string($tag)) {
             $ret['err_msg'] = 'tag is not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['tag'] = $tag;
         $params['timestamp'] = time();
@@ -1002,12 +1095,13 @@ class XingeApp
      */
     public function QueryTokenTags($deviceToken)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_string($deviceToken)) {
             $ret['err_msg'] = 'deviceToken is not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['device_token'] = $deviceToken;
         $params['timestamp'] = time();
@@ -1020,12 +1114,13 @@ class XingeApp
      */
     public function CancelTimingPush($pushId)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_string($pushId) || empty($pushId)) {
             $ret['err_msg'] = 'pushId not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['push_id'] = $pushId;
         $params['timestamp'] = time();
@@ -1037,6 +1132,7 @@ class XingeApp
     protected function json2Array($json)
     {
         $json = stripslashes($json);
+
         return json_decode($json, true);
     }
 
@@ -1064,7 +1160,7 @@ class XingeApp
     public function InitParams()
     {
 
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['timestamp'] = time();
 
@@ -1073,23 +1169,25 @@ class XingeApp
 
     public function BatchSetTag($tagTokenPairs)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
 
         foreach ($tagTokenPairs as $pair) {
             if (!($pair instanceof TagTokenPair)) {
                 $ret['err_msg'] = 'tag-token pair type error!';
+
                 return $ret;
             }
             if (!$this->ValidateToken($pair->token)) {
                 $ret['err_msg'] = sprintf("invalid token %s", $pair->token);
+
                 return $ret;
             }
         }
         $params = $this->InitParams();
 
-        $tag_token_list = array();
+        $tag_token_list = [];
         foreach ($tagTokenPairs as $pair) {
-            array_push($tag_token_list, array($pair->tag, $pair->token));
+            array_push($tag_token_list, [$pair->tag, $pair->token]);
         }
         $params['tag_token_list'] = json_encode($tag_token_list);
 
@@ -1098,23 +1196,25 @@ class XingeApp
 
     public function BatchDelTag($tagTokenPairs)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
 
         foreach ($tagTokenPairs as $pair) {
             if (!($pair instanceof TagTokenPair)) {
                 $ret['err_msg'] = 'tag-token pair type error!';
+
                 return $ret;
             }
             if (!$this->ValidateToken($pair->token)) {
                 $ret['err_msg'] = sprintf("invalid token %s", $pair->token);
+
                 return $ret;
             }
         }
         $params = $this->InitParams();
 
-        $tag_token_list = array();
+        $tag_token_list = [];
         foreach ($tagTokenPairs as $pair) {
-            array_push($tag_token_list, array($pair->tag, $pair->token));
+            array_push($tag_token_list, [$pair->tag, $pair->token]);
         }
         $params['tag_token_list'] = json_encode($tag_token_list);
 
@@ -1123,12 +1223,13 @@ class XingeApp
 
     public function QueryInfoOfToken($deviceToken)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_string($deviceToken)) {
             $ret['err_msg'] = 'deviceToken is not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['device_token'] = $deviceToken;
         $params['timestamp'] = time();
@@ -1138,12 +1239,13 @@ class XingeApp
 
     public function QueryTokensOfAccount($account)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_string($account)) {
             $ret['err_msg'] = 'account is not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['account'] = $account;
         $params['timestamp'] = time();
@@ -1153,12 +1255,13 @@ class XingeApp
 
     public function DeleteTokenOfAccount($account, $deviceToken)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_string($account) || !is_string($deviceToken)) {
             $ret['err_msg'] = 'account or deviceToken is not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['account'] = $account;
         $params['device_token'] = $deviceToken;
@@ -1169,12 +1272,13 @@ class XingeApp
 
     public function DeleteAllTokensOfAccount($account)
     {
-        $ret = array('ret_code' => -1);
+        $ret = ['ret_code' => -1];
         if (!is_string($account)) {
             $ret['err_msg'] = 'account is not valid';
+
             return $ret;
         }
-        $params = array();
+        $params = [];
         $params['access_id'] = $this->accessId;
         $params['account'] = $account;
         $params['timestamp'] = time();
@@ -1242,7 +1346,7 @@ class Message
 
     public function __construct()
     {
-        $this->m_acceptTimes = array();
+        $this->m_acceptTimes = [];
         $this->m_multiPkg = 0;
         $this->m_raw = "";
         $this->m_style = new Style(0);
@@ -1291,15 +1395,17 @@ class Message
 
     public function acceptTimeToJson()
     {
-        $ret = array();
+        $ret = [];
         foreach ($this->m_acceptTimes as $acceptTime) {
             $ret[] = $acceptTime->toArray();
         }
+
         return $ret;
     }
 
     /**
      * 消息类型
+     *
      * @param int $type 1：通知 2：透传消息
      */
     public function setType($type)
@@ -1366,7 +1472,7 @@ class Message
     {
         if (!empty($this->m_raw))
             return $this->m_raw;
-        $ret = array();
+        $ret = [];
         if ($this->m_type == self::TYPE_NOTIFICATION) {
             $ret['title'] = $this->m_title;
             $ret['content'] = $this->m_content;
@@ -1397,6 +1503,7 @@ class Message
             $ret['accept_time'] = $this->acceptTimeToJson();
         }
         $ret['custom_content'] = $this->m_custom;
+
         return json_encode($ret);
     }
 
@@ -1445,7 +1552,7 @@ class Message
             if (!is_array($this->m_custom))
                 return false;
         } else {
-            $this->m_custom = array();
+            $this->m_custom = [];
         }
 
         if (isset($this->m_loopInterval)) {
@@ -1494,7 +1601,7 @@ class MessageIOS
 
     public function __construct()
     {
-        $this->m_acceptTimes = array();
+        $this->m_acceptTimes = [];
     }
 
     public function __destruct()
@@ -1529,10 +1636,11 @@ class MessageIOS
 
     public function acceptTimeToJson()
     {
-        $ret = array();
+        $ret = [];
         foreach ($this->m_acceptTimes as $acceptTime) {
             $ret[] = $acceptTime->toArray();
         }
+
         return $ret;
     }
 
@@ -1601,7 +1709,7 @@ class MessageIOS
         if (!empty($this->m_raw))
             return $this->m_raw;
         $ret = $this->m_custom;
-        $aps = array();
+        $aps = [];
         $ret['accept_time'] = $this->acceptTimeToJson();
         $aps['alert'] = $this->m_alert;
         if (isset($this->m_badge))
@@ -1611,6 +1719,7 @@ class MessageIOS
         if (isset($this->m_category))
             $aps['category'] = $this->m_category;
         $ret['aps'] = $aps;
+
         return json_encode($ret);
     }
 
@@ -1646,7 +1755,7 @@ class MessageIOS
             if (!is_array($this->m_custom))
                 return false;
         } else {
-            $this->m_custom = array();
+            $this->m_custom = [];
         }
         if (!isset($this->m_alert))
             return false;
@@ -1700,6 +1809,7 @@ class ClickAction
 
     /**
      * 动作类型
+     *
      * @param int $actionType 1打开activity或app本身，2打开url，3打开Intent
      */
     public function __construct()
@@ -1761,13 +1871,13 @@ class ClickAction
 
     public function toJson()
     {
-        $ret = array();
+        $ret = [];
         $ret['action_type'] = $this->m_actionType;
-        $ret['browser'] = array('url' => $this->m_url, 'confirm' => $this->m_confirmOnUrl);
+        $ret['browser'] = ['url' => $this->m_url, 'confirm' => $this->m_confirmOnUrl];
         $ret['activity'] = $this->m_activity;
         $ret['intent'] = $this->m_intent;
 
-        $aty_attr = array();
+        $aty_attr = [];
         if (isset($this->m_atyAttrIntentFlag)) {
             $aty_attr['if'] = $this->m_atyAttrIntentFlag;
         }
@@ -1791,6 +1901,7 @@ class ClickAction
         if ($this->m_actionType == self::TYPE_ACTIVITY) {
             if (!isset($this->m_activity)) {
                 $this->m_activity = "";
+
                 return true;
             }
             if (isset($this->m_atyAttrIntentFlag)) {
@@ -1806,6 +1917,7 @@ class ClickAction
 
             if (is_string($this->m_activity) && !empty($this->m_activity))
                 return true;
+
             return false;
         }
 
@@ -1815,12 +1927,14 @@ class ClickAction
                 $this->m_confirmOnUrl >= 0 && $this->m_confirmOnUrl <= 1
             )
                 return true;
+
             return false;
         }
 
         if ($this->m_actionType == self::TYPE_INTENT) {
             if (is_string($this->m_intent) && !empty($this->m_intent))
                 return true;
+
             return false;
         }
     }
@@ -1988,10 +2102,10 @@ class TimeInterval
 
     public function toArray()
     {
-        return array(
-            'start' => array('hour' => strval($this->m_startHour), 'min' => strval($this->m_startMin)),
-            'end' => array('hour' => strval($this->m_endHour), 'min' => strval($this->m_endMin))
-        );
+        return [
+            'start' => ['hour' => strval($this->m_startHour), 'min' => strval($this->m_startMin)],
+            'end'   => ['hour' => strval($this->m_endHour), 'min' => strval($this->m_endMin)],
+        ];
     }
 
     public function isValid()
@@ -2024,7 +2138,7 @@ class ParamsBase
     /**
      * @var array 当前传入的参数列表
      */
-    public $_params = array();
+    public $_params = [];
 
     /**
      * 构造函数
@@ -2032,11 +2146,11 @@ class ParamsBase
     public function __construct($params)
     {
         if (!is_array($params)) {
-            return array();
+            return [];
         }
         foreach ($params as $key => $value) {
             //如果是非法的key值，则不使用这个key
-            $this->_params[$key] = $value;
+            $this->_params[ $key ] = $value;
         }
     }
 
@@ -2045,7 +2159,7 @@ class ParamsBase
         if (!isset($k) || !isset($v)) {
             return;
         }
-        $this->_params[$k] = $v;
+        $this->_params[ $k ] = $v;
     }
 
     /**
@@ -2066,6 +2180,7 @@ class ParamsBase
                 $param_str .= $key . '=' . $value;
             }
         }
+
         //print $method.$url.$param_str.$secret_key."\n";
         return md5($method . $url . $param_str . $secret_key);
     }
@@ -2082,18 +2197,20 @@ class RequestBase
 
     /**
      * 发起一个get或post请求
-     * @param $url 请求的url
-     * @param int $method 请求方式
-     * @param array $params 请求参数
+     *
+     * @param       $url        请求的url
+     * @param int   $method     请求方式
+     * @param array $params     请求参数
      * @param array $extra_conf curl配置, 高级需求可以用, 如
-     * $extra_conf = array(
-     *    CURLOPT_HEADER => true,
-     *    CURLOPT_RETURNTRANSFER = false
-     * )
+     *                          $extra_conf = array(
+     *                          CURLOPT_HEADER => true,
+     *                          CURLOPT_RETURNTRANSFER = false
+     *                          )
+     *
      * @return bool|mixed 成功返回数据，失败返回false
      * @throws Exception
      */
-    public static function exec($url, $params = array(), $method = self::METHOD_GET, $extra_conf = array())
+    public static function exec($url, $params = [], $method = self::METHOD_GET, $extra_conf = [])
     {
         $params = is_array($params) ? http_build_query($params) : $params;
         //如果是get请求，直接将参数附在url后面
@@ -2102,24 +2219,24 @@ class RequestBase
         }
 
         //默认配置
-        $curl_conf = array(
-            CURLOPT_URL => $url, //请求url
-            CURLOPT_HEADER => false, //不输出头信息
+        $curl_conf = [
+            CURLOPT_URL            => $url, //请求url
+            CURLOPT_HEADER         => false, //不输出头信息
             CURLOPT_RETURNTRANSFER => true, //不输出返回数据
             CURLOPT_CONNECTTIMEOUT => 3 // 连接超时时间
-        );
+        ];
 
         //配置post请求额外需要的配置项
         if ($method == self::METHOD_POST) {
             //使用post方式
-            $curl_conf[CURLOPT_POST] = true;
+            $curl_conf[ CURLOPT_POST ] = true;
             //post参数
-            $curl_conf[CURLOPT_POSTFIELDS] = $params;
+            $curl_conf[ CURLOPT_POSTFIELDS ] = $params;
         }
 
         //添加额外的配置
         foreach ($extra_conf as $k => $v) {
-            $curl_conf[$k] = $v;
+            $curl_conf[ $k ] = $v;
         }
 
         $data = false;
@@ -2130,11 +2247,15 @@ class RequestBase
             curl_setopt_array($curl_handle, $curl_conf);
             //发起请求
             $data = curl_exec($curl_handle);
-            if ($data === false) {
-                throw new Exception('CURL ERROR: ' . curl_error($curl_handle));
+
+            //状态码
+            $httpResult = curl_getinfo($curl_handle);
+            if ($data === false || $httpResult['http_code'] != '200') {
+                $error_info = 'CURL ERROR: ' . curl_error($curl_handle) . '; HTTP REQUEST :' . json_encode($curl_conf) . ';HTTP RESPONSE' . json_encode($httpResult);
+                throw new \Exception($error_info);
             }
-        } catch (Exception $e) {
-            echo $e->getMessage();
+        } catch (\Exception $e) {
+            Log::record($e->getMessage(), 'error');
         }
         curl_close($curl_handle);
 

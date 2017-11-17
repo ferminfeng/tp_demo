@@ -32,7 +32,7 @@ class AopClient {
     private $ENCRYPT_XML_NODE_NAME = "response_encrypted";
     private $needEncrypt = false;
     //签名类型
-    public $signType = "RSA";
+    public $signType = "RSA2";
     //加密密钥和类型
 
     public $encryptKey;
@@ -50,11 +50,11 @@ class AopClient {
         $this->rsaPrivateKey = $config['rsa_private_key'];
     }
 
-    public function generateSign($params, $signType = "RSA") {
+    public function generateSign($params, $signType = "RSA2") {
         return $this->sign($this->getSignContent($params), $signType);
     }
 
-    public function rsaSign($params, $signType = "RSA") {
+    public function rsaSign($params, $signType = "RSA2") {
         return $this->sign($this->getSignContent($params), $signType);
     }
 
@@ -82,7 +82,7 @@ class AopClient {
         return $stringToBeSigned;
     }
 
-    protected function sign($data, $signType = "RSA") {
+    protected function sign($data, $signType = "RSA2") {
         if ($this->checkEmpty($this->rsaPrivateKeyFilePath)) {
             $priKey = $this->rsaPrivateKey;
             $res = "-----BEGIN RSA PRIVATE KEY-----\n" .
@@ -568,7 +568,7 @@ class AopClient {
         return $this->verify($this->getSignContent($params), $sign, $rsaPublicKeyFilePath);
     }
 
-    function verify($data, $sign, $rsaPublicKeyFilePath, $signType = 'RSA') {
+    function verify($data, $sign, $rsaPublicKeyFilePath, $signType = 'RSA2') {
 
         if ($this->checkEmpty($this->alipayPublicKey)) {
 

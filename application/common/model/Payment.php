@@ -15,15 +15,16 @@ class Payment extends Model
 
     /**
      * 唤起支付
+     *
      * @param $param
-     *  payment_way值含义
+     *      payment_way值含义
      *      1.支付宝H5
      *      2.支付宝App
      *      3.支付宝PC
      *      4.微信H5
      *      5.微信App
      *      6.小程序
-     * 当为支付宝H5以及支付宝PC唤起支付时直接输出返回参数内data的数据即可，data参数内为from表单代码，它会自动提交
+     *      当为支付宝H5以及支付宝PC唤起支付时直接输出返回参数内data的数据即可，data参数内为from表单代码，它会自动提交
      *
      *  payment_type 自定义的订单类型,用于在接收支付异步通知时区分多种类型订单 例:order;
      */
@@ -57,13 +58,13 @@ class Payment extends Model
                 $request = new \payment\AlipayAop\request\AlipayTradeWapPayRequest();
                 $setBizContent = json_encode(
                     [
-                        'body' => $payment_name,
-                        'subject' => $payment_name,
-                        'out_trade_no' => $out_sn,
+                        'body'            => $payment_name,
+                        'subject'         => $payment_name,
+                        'out_trade_no'    => $out_sn,
                         'timeout_express' => '24h',//该笔订单允许的最晚付款时间，逾期将关闭交易
-                        'total_amount' => $payment_amount,//订单总金额
-                        'product_code' => 'QUICK_WAP_WAY',
-                        'passback_params' => urlencode(json_encode($notify_data)),//回传参数，支付宝会在异步通知时将该参数原样返回。本参数必须进行UrlEncode之后才可以发送给支付宝
+                        'total_amount'    => $payment_amount,//订单总金额
+                        'product_code'    => 'QUICK_WAP_WAY',
+                        'passback_params' => urlencode(http_build_query($notify_data)),//回传参数，支付宝会在异步通知时将该参数原样返回。本参数必须进行UrlEncode之后才可以发送给支付宝
                     ]
                 );
                 $request->setBizContent($setBizContent);
@@ -84,13 +85,13 @@ class Payment extends Model
                 $request = new \payment\AlipayAop\request\AlipayTradeAppPayRequest();
                 $setBizContent = json_encode(
                     [
-                        'body' => $payment_name,
-                        'subject' => $payment_name,
-                        'out_trade_no' => $out_sn,
+                        'body'            => $payment_name,
+                        'subject'         => $payment_name,
+                        'out_trade_no'    => $out_sn,
                         'timeout_express' => '24h',//该笔订单允许的最晚付款时间，逾期将关闭交易
-                        'total_amount' => $payment_amount,//订单总金额
-                        'product_code' => 'QUICK_MSECURITY_PAY',
-                        'passback_params' => urlencode(json_encode($notify_data)),//回传参数，支付宝会在异步通知时将该参数原样返回。本参数必须进行UrlEncode之后才可以发送给支付宝
+                        'total_amount'    => $payment_amount,//订单总金额
+                        'product_code'    => 'QUICK_MSECURITY_PAY',
+                        'passback_params' => urlencode(http_build_query($notify_data)),//回传参数，支付宝会在异步通知时将该参数原样返回。本参数必须进行UrlEncode之后才可以发送给支付宝
                     ]
                 );
                 $request->setBizContent($setBizContent);
@@ -108,13 +109,13 @@ class Payment extends Model
                 $request = new \payment\AlipayAop\request\AlipayTradePagePayRequest();
                 $setBizContent = json_encode(
                     [
-                        'body' => $payment_name,
-                        'subject' => $payment_name,
-                        'out_trade_no' => $out_sn,
+                        'body'            => $payment_name,
+                        'subject'         => $payment_name,
+                        'out_trade_no'    => $out_sn,
                         'timeout_express' => '24h',//该笔订单允许的最晚付款时间，逾期将关闭交易
-                        'total_amount' => $payment_amount,//订单总金额
-                        'product_code' => 'FAST_INSTANT_TRADE_PAY',
-                        'passback_params' => urlencode(json_encode($notify_data)),//回传参数，支付宝会在异步通知时将该参数原样返回。本参数必须进行UrlEncode之后才可以发送给支付宝
+                        'total_amount'    => $payment_amount,//订单总金额
+                        'product_code'    => 'FAST_INSTANT_TRADE_PAY',
+                        'passback_params' => urlencode(http_build_query($notify_data)),//回传参数，支付宝会在异步通知时将该参数原样返回。本参数必须进行UrlEncode之后才可以发送给支付宝
                     ]
                 );
 
@@ -134,7 +135,7 @@ class Payment extends Model
             case '4':
                 $total_fee = $payment_amount * 100;//支付金额
 
-                $attach = urlencode(json_encode($notify_data));//附加数据，在查询API和支付通知中原样返回
+                $attach = urlencode(http_build_query($notify_data));//附加数据，在查询API和支付通知中原样返回
 
                 $weiXinPay = new \payment\Wxpay\JsApiPay();
 
@@ -142,7 +143,7 @@ class Payment extends Model
                 $openId = $weiXinPay->GetOpenid($data);
                 if ($openId) {
                     //获取prepay_id
-                    $prepay_data = $weiXinPay->get_prepay_id($payment_name, $out_sn, $total_fee, $openId, $attach, 1);
+                    $prepay_data = $weiXinPay->get_prepay_id($payment_name, $out_sn, $total_fee, $openId, $attach, FALSE);
                     if (isset($prepay_data['appid']) && isset($prepay_data['prepay_id'])
                         && $prepay_data['prepay_id'] != ""
                     ) {
@@ -160,11 +161,11 @@ class Payment extends Model
             case '5':
                 $total_fee = $payment_amount * 100;//支付金额
 
-                $attach = urlencode(json_encode($notify_data));//附加数据，在查询API和支付通知中原样返回
+                $attach = urlencode(http_build_query($notify_data));//附加数据，在查询API和支付通知中原样返回
 
                 $weiXinPay = new \payment\Wxpay\WxPay();
 
-                $prepay_data = $weiXinPay->get_prepay_id($payment_name, $out_sn, $total_fee, $attach, 1);
+                $prepay_data = $weiXinPay->get_prepay_id($payment_name, $out_sn, $total_fee, $attach, FALSE);
 
                 if ($prepay_data['result_code'] == 'SUCCESS' && $prepay_data['return_code'] == 'SUCCESS') {
                     //获取支付参数
@@ -196,10 +197,12 @@ class Payment extends Model
 
     /**
      * 查询支付结果
-     * @param int $payment_way 支付方式 1.支付宝H5 2.支付宝App 3.支付宝PC 4.微信H5 5.微信App 6.小程序
-     * @param string $out_sn 商户订单号
-     * @param string $trade_no 第三方交易流水号
+     *
+     * @param int    $payment_way    支付方式 1.支付宝H5 2.支付宝App 3.支付宝PC 4.微信H5 5.微信App 6.小程序
+     * @param string $out_sn         商户订单号
+     * @param string $trade_no       第三方交易流水号
      * @param string $payment_amount 交易金额
+     *
      * @return array
      */
     public function searchPaymentResult($payment_way, $out_sn = '', $trade_no = '')
@@ -254,6 +257,7 @@ class Payment extends Model
                             $return = ['code' => '3', 'mag' => '交易创建但未支付', 'data' => $result->$responseNode];
                             break;
                     }
+
                     return $return;
                 } else {
                     return ['code' => '-1', 'mag' => '交易不存在', 'data' => $result->$responseNode];
@@ -297,6 +301,7 @@ class Payment extends Model
                             $return = ['code' => '3', 'mag' => '未支付', 'data' => $result];
                             break;
                     }
+
                     return $return;
                 } else {
                     return ['code' => '-1', 'mag' => '交易不存在', 'data' => $result];
@@ -340,6 +345,7 @@ class Payment extends Model
                             $return = ['code' => '3', 'mag' => '未支付', 'data' => $result];
                             break;
                     }
+
                     return $return;
                 } else {
                     return ['code' => '-1', 'mag' => '交易不存在', 'data' => $result];
@@ -361,7 +367,9 @@ class Payment extends Model
 
     /**
      * 支付宝单笔退款查询
+     *
      * @param $param
+     *
      * @return array
      */
     public function aliPaySearchRefund($param)
@@ -374,8 +382,8 @@ class Payment extends Model
         $request = new \payment\AlipayAop\request\AlipayTradeFastpayRefundQueryRequest();
         $setBizContent = json_encode(
             [
-                'out_trade_no' => $param['out_sn'],
-                'trade_no' => $param['trade_no'],
+                'out_trade_no'   => $param['out_sn'],
+                'trade_no'       => $param['trade_no'],
                 'out_request_no' => $param['batch_no'],
             ]
         );
@@ -405,7 +413,9 @@ class Payment extends Model
 
     /**
      * 支付宝单笔退款
+     *
      * @param $param
+     *
      * @return array
      */
     public function aliPayRefund($param)
@@ -418,10 +428,10 @@ class Payment extends Model
         $request = new \payment\AlipayAop\request\AlipayTradeRefundRequest();
         $setBizContent = json_encode(
             [
-                'out_trade_no' => $param['out_sn'],
-                'trade_no' => $param['trade_no'],
-                'refund_amount' => $param['refund_amount'],
-                'refund_reason' => $param['refund_reason'],
+                'out_trade_no'   => $param['out_sn'],
+                'trade_no'       => $param['trade_no'],
+                'refund_amount'  => $param['refund_amount'],
+                'refund_reason'  => $param['refund_reason'],
                 'out_request_no' => $param['batch_no'],
             ]
         );
@@ -434,9 +444,9 @@ class Payment extends Model
 
         //异步通知数据入库
         $insert_payment_notify = [
-            'out_sn' => $param['out_sn'],
-            'payment_way' => '61',
-            'payment_time' => date('Y-m-d H:i:s', config('time')),
+            'out_sn'          => $param['out_sn'],
+            'payment_way'     => '61',
+            'payment_time'    => date('Y-m-d H:i:s', config('time')),
             'payment_content' => json_encode($result),
         ];
         $model_payment_notify = new \app\common\model\PaymentNotify();
@@ -465,7 +475,9 @@ class Payment extends Model
 
     /**
      * 微信单笔退款查询
+     *
      * @param $param
+     *
      * @return array
      */
     public function wxSearchRefund($param)
@@ -494,7 +506,9 @@ class Payment extends Model
 
     /**
      * 微信单笔退款
+     *
      * @param $param
+     *
      * @return array
      */
     public function wxRefund($param)
@@ -517,9 +531,9 @@ class Payment extends Model
 
         //异步通知数据入库
         $insert_payment_notify = [
-            'out_sn' => $param['out_sn'],
-            'payment_way' => $param['payment_way'] == '5' ? '62' : '63',//62.微信App退款 63.微信H5退款'
-            'payment_time' => date('Y-m-d H:i:s', config('time')),
+            'out_sn'          => $param['out_sn'],
+            'payment_way'     => $param['payment_way'] == '5' ? '62' : '63',//62.微信App退款 63.微信H5退款'
+            'payment_time'    => date('Y-m-d H:i:s', config('time')),
             'payment_content' => json_encode($result),
         ];
         $model_payment_notify = new \app\common\model\PaymentNotify();
@@ -534,7 +548,9 @@ class Payment extends Model
 
     /**
      * 查询对账单下载地址
+     *
      * @param $param
+     *
      * @return array
      */
     public function getBillDownload($param)

@@ -19,8 +19,8 @@ class Payment extends Base
      */
     public function fwAliPayNotify()
     {
-        $notify_data     = $_POST;
-        $params = json_decode(urldecode($notify_data['passback_params']));
+        $notify_data = $_POST;
+        parse_str(urldecode($notify_data['passback_params']), $params);
 
         //异步通知数据入库
         $insert_payment_notify = [
@@ -29,18 +29,18 @@ class Payment extends Base
             'payment_time'    => $notify_data['gmt_payment'],
             'payment_content' => json_encode($notify_data),
         ];
-        $model_payment_notify  = new PaymentNotifyModel();
+        $model_payment_notify = new PaymentNotifyModel();
         $model_payment_notify->insertPaymentNotify($insert_payment_notify);
 
         //支付宝验签
-        $aop           = new \payment\AlipayAop\AopClient();
+        $aop = new \payment\AlipayAop\AopClient();
         $notify_result = $aop->rsaCheckV1($notify_data);
         if ($notify_result) {
             //区分异步通知状态 当trade_status=TRADE_SUCCESS时表明支付成功
             if ($notify_data['trade_status'] == 'TRADE_SUCCESS') {
 
                 //修改交易状态
-                $param  = [
+                $param = [
                     'out_sn'         => $notify_data['out_trade_no'],
                     'trade_no'       => $notify_data['trade_no'],
                     'payment_amount' => $notify_data['total_amount'],
@@ -54,31 +54,58 @@ class Payment extends Base
                     exit('success');
                 }
             }
-        }
+        } else {
+            $error_info = [
+                'msg'         => '支付宝验签失败',
+                'notify_data' => $notify_data,
+            ];
+            handleErrorInfo('insert_alipay_notify_error', 1, $error_info);
 
-        //验签失败
-        exit('fail');
+            //验签失败
+            exit('fail');
+        }
+    }
+
+    /**
+     * 接收微信APP支付异步通知
+     */
+    public function fwWxAppNotify()
+    {
+        //验签
+        $new_content = file_get_contents("php://input");
+
+        $weiXinPay = new \payment\Wxpay\WxPay();
+        $notify_info = $weiXinPay->check_notify();
+        $this->fwWxNotify($weiXinPay, $new_content, $notify_info);
+    }
+
+    /**
+     * 接收微信H5支付异步通知
+     */
+    public function fwWxH5Notify()
+    {
+        //验签
+        $new_content = file_get_contents("php://input");
+
+        $weiXinPay = new \payment\Wxpay\JsApiPay();
+        $notify_info = $weiXinPay->check_notify();
+        $this->fwWxNotify($weiXinPay, $new_content, $notify_info);
     }
 
     /**
      * 转发微信支付异步通知
      */
-    public function fwWxNotify()
+    private function fwWxNotify($weiXinPay, $new_content, $notify_info)
     {
-        //验签
-        $new_content = file_get_contents("php://input");
-
-        $weixinPay   = new \payment\Wxpay\WxPay();
-        $notify_info = $weixinPay->check_notify();
-
+        $attach = [];
         if (isset($notify_info['attach'])) {
-            $attach = json_decode($notify_info['attach'], true);;
+            parse_str(urldecode($notify_info['attach']), $attach);
         }
 
         //异步通知数据入库
         $insert_payment_notify = [
             'out_sn'          => isset($notify_info['out_trade_no']) ? $notify_info['out_trade_no'] : '',
-            'payment_way'     => isset($attach['payment_way']) ? $attach['payment_way'] : '3',
+            'payment_way'     => isset($attach['payment_way']) ? $attach['payment_way'] : '',
             'payment_content' => $new_content,
         ];
         //转换支付时间
@@ -87,23 +114,27 @@ class Payment extends Base
             $insert_payment_notify['payment_time'] = $payment_time;
         }
         $model_payment_notify = new PaymentNotifyModel();
-        $model_payment_notify->insertPaymentNotify($insert_payment_notify);
+        $insert_notify_status = $model_payment_notify->insertPaymentNotify($insert_payment_notify);
+        //失败时记录失败信息
+        if ($insert_notify_status['code'] != '1') {
+            handleErrorInfo('insert_wxapy_notify_error', 1, $insert_notify_status);
+        }
 
         //验签失败 返回消息给微信服务器
         if (!$notify_info) {
             //返回消息给微信服务器
-            $weixinPay->resultXmlToWx(['return_code' => 'FAIL', 'return_msg' => '签名失败']);
+            $weiXinPay->resultXmlToWx(['return_code' => 'FAIL', 'return_msg' => '签名失败']);
         }
 
         //支付状态验证
         if ($notify_info['result_code'] != 'SUCCESS' || $notify_info['return_code'] != 'SUCCESS' || !$notify_info['transaction_id']) {
             handleErrorInfo('insert_wxapy_notify_error', 1, $notify_info);
             //返回消息给微信服务器
-            $weixinPay->resultXmlToWx(['return_code' => 'FAIL', 'return_msg' => '支付状态错误']);
+            $weiXinPay->resultXmlToWx(['return_code' => 'FAIL', 'return_msg' => '支付状态错误']);
         }
 
         //修改交易状态
-        $param  = [
+        $param = [
             'out_sn'         => $notify_info['out_trade_no'],
             'trade_no'       => $notify_info['transaction_id'],
             'payment_amount' => $notify_info['total_fee'] / 100,
@@ -115,10 +146,10 @@ class Payment extends Base
 
         if ($result) {
             //返回消息给微信服务器
-            $weixinPay->resultXmlToWx(['return_code' => 'SUCCESS', 'return_msg' => 'OK']);
+            $weiXinPay->resultXmlToWx(['return_code' => 'SUCCESS', 'return_msg' => 'OK']);
         } else {
             //返回消息给微信服务器
-            $weixinPay->resultXmlToWx(['return_code' => 'FAIL', 'return_msg' => '修改失败']);
+            $weiXinPay->resultXmlToWx(['return_code' => 'FAIL', 'return_msg' => '修改失败']);
         }
 
     }
@@ -134,7 +165,7 @@ class Payment extends Base
 
         //区分订单到payment_log查询是否支付成功
         $model_payment_log = new PaymentLogModel();
-        $payment_log       = $model_payment_log->getPaymentLog([
+        $payment_log = $model_payment_log->getPaymentLog([
             'trade_no'       => $param['trade_no'],
             'out_sn'         => $param['out_sn'],
             'payment_status' => '1',
@@ -146,7 +177,7 @@ class Payment extends Base
             //根据订单类型分别处理订单
             switch ($param['payment_type']) {
                 case 'order' :
-                    $payment            = [
+                    $payment = [
                         'out_sn'         => $param['out_sn'],
                         'trade_no'       => $param['trade_no'],
                         'payment_amount' => $param['payment_amount'],
@@ -175,7 +206,7 @@ class Payment extends Base
                     'payment_time'   => $param['payment_time'],
                     'payment_status' => '1',
                 ];
-                $model_payment_log     = new PaymentLogModel();
+                $model_payment_log = new PaymentLogModel();
                 $insert_payment_status = $model_payment_log->insertPaymentLog($insert_payment_notify);
                 //失败时记录失败信息
                 if ($insert_payment_status['code'] != '1') {
@@ -198,14 +229,17 @@ class Payment extends Base
         $notify_data = $_GET;
 
         //支付宝验签
-        $aop           = new \payment\AlipayAop\AopClient();
+        $aop = new \payment\AlipayAop\AopClient();
         $notify_result = $aop->rsaCheckV1($notify_data);
         if ($notify_result) {
             //查询是否支付
+            $trade_no = $notify_data['trade_no'];
+            $out_trade_no = $notify_data['out_trade_no'];
             $model_payment = new PaymentModel();
-            $result        = $model_payment->searchPaymentResult(1, $notify_data['out_trade_no'], $notify_data['trade_no']);
+            $result = $model_payment->searchPaymentResult(1, $out_trade_no, $trade_no);
             if ($result['code'] == '1') {
-                echo '支付成功';
+                $payment_type = substr($out_trade_no, 1, 2);
+                echo '支付成功-payment_type=' . $payment_type;
             }
         }
     }
@@ -218,14 +252,17 @@ class Payment extends Base
         $notify_data = $_GET;
 
         //支付宝验签
-        $aop           = new \payment\AlipayAop\AopClient();
+        $aop = new \payment\AlipayAop\AopClient();
         $notify_result = $aop->rsaCheckV1($notify_data);
         if ($notify_result) {
             //查询是否支付
+            $trade_no = $notify_data['trade_no'];
+            $out_trade_no = $notify_data['out_trade_no'];
             $model_payment = new PaymentModel();
-            $result        = $model_payment->searchPaymentResult(6, $notify_data['out_trade_no'], $notify_data['trade_no']);
+            $result = $model_payment->searchPaymentResult(6, $out_trade_no, $trade_no);
             if ($result['code'] == '1') {
-                echo '支付成功';
+                $payment_type = substr($out_trade_no, 1, 2);
+                echo '支付成功-payment_type=' . $payment_type;
             }
         }
     }

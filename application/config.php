@@ -9,6 +9,7 @@
 // | Author: liu21st <liu21st@gmail.com>
 // +----------------------------------------------------------------------
 use think\Env;
+
 return [
     // +----------------------------------------------------------------------
     // | 应用设置
@@ -121,7 +122,7 @@ return [
     // | 模板设置
     // +----------------------------------------------------------------------
 
-    'template'               => [
+    'template'              => [
         // 模板引擎类型 支持 php think 支持扩展
         'type'         => 'Think',
         // 模板路径
@@ -141,30 +142,30 @@ return [
     ],
 
     // 视图输出字符串内容替换
-    'view_replace_str'       => [],
+    'view_replace_str'      => [],
     // 默认跳转页面对应的模板文件
-    'dispatch_success_tmpl'  => THINK_PATH . 'tpl' . DS . 'dispatch_jump.tpl',
-    'dispatch_error_tmpl'    => THINK_PATH . 'tpl' . DS . 'dispatch_jump.tpl',
+    'dispatch_success_tmpl' => THINK_PATH . 'tpl' . DS . 'dispatch_jump.tpl',
+    'dispatch_error_tmpl'   => THINK_PATH . 'tpl' . DS . 'dispatch_jump.tpl',
 
     // +----------------------------------------------------------------------
     // | 异常及错误设置
     // +----------------------------------------------------------------------
 
     // 异常页面的模板文件
-    'exception_tmpl'         => THINK_PATH . 'tpl' . DS . 'think_exception.tpl',
+    'exception_tmpl'        => THINK_PATH . 'tpl' . DS . 'think_exception.tpl',
 
     // 错误显示信息,非调试模式有效
-    'error_message'          => '页面错误！请稍后再试～',
+    'error_message'         => '页面错误！请稍后再试～',
     // 显示错误信息
-    'show_error_msg'         => false,
+    'show_error_msg'        => false,
     // 异常处理handle类 留空使用 \think\exception\Handle
-    'exception_handle'       => '',
+    'exception_handle'      => '',
 
     // +----------------------------------------------------------------------
     // | 日志设置
     // +----------------------------------------------------------------------
 
-    'log'                    => [
+    'log'   => [
         // 日志记录方式，内置 file socket 支持扩展
         'type'  => 'File',
         // 日志保存目录
@@ -176,7 +177,7 @@ return [
     // +----------------------------------------------------------------------
     // | Trace设置 开启 app_trace 后 有效
     // +----------------------------------------------------------------------
-    'trace'                  => [
+    'trace' => [
         // 内置Html Console 支持扩展
         'type' => 'Html',
     ],
@@ -185,7 +186,7 @@ return [
     // | 缓存设置
     // +----------------------------------------------------------------------
 
-    'cache'                  => [
+    'cache' => [
         // 驱动方式
         'type'   => 'File',
         // 缓存保存目录
@@ -200,7 +201,7 @@ return [
     // | 会话设置
     // +----------------------------------------------------------------------
 
-    'session'                => [
+    'session'               => [
         'id'             => '',
         // SESSION_ID的提交变量,解决flash上传跨域
         'var_session_id' => '',
@@ -215,7 +216,7 @@ return [
     // +----------------------------------------------------------------------
     // | Cookie设置
     // +----------------------------------------------------------------------
-    'cookie'                 => [
+    'cookie'                => [
         // cookie 名称前缀
         'prefix'    => '',
         // cookie 保存时间
@@ -233,23 +234,23 @@ return [
     ],
 
     //分页配置
-    'paginate'               => [
+    'paginate'              => [
         'type'      => 'bootstrap',
         'var_page'  => 'page',
         'list_rows' => 15,
     ],
 
     //支付回调域名
-    'pay_notify_url' => Env::get('pay_notify_url'),
+    'pay_notify_url'        => Env::get('pay_notify_url'),
 
     //项目运行环境
-    'project_dev' => Env::get('project_dev'),
+    'project_dev'           => Env::get('project_dev'),
 
     //钉钉群组机器人access_token
-    'dd_access_token' => Env::get('dd_access_token'),
+    'dd_access_token'       => Env::get('dd_access_token'),
 
     //服务器当前时间
-    'time' => time(),
+    'time'                  => time(),
 
     //支付宝pc端支付同步通知地址
     'aliPay_pc_return_path' => 'api/payment/aliPayPcReturn',
@@ -258,8 +259,11 @@ return [
     'aliPay_h5_return_path' => 'api/payment/aliPayH5Return',
 
     //支付宝支付异步通知地址
-    'aliPay_notify_path' => 'api/payment/fwAliPayNotify',
+    'aliPay_notify_path'    => 'api/payment/fwAliPayNotify',
 
-    //微信支付异步通知地址
-    'wxPay_notify_path' => 'api/payment/fwWxNotify',
+    //微信app支付异步通知地址
+    'wxPay_app_notify_path' => 'api/payment/fwWxAppNotify',
+
+    //微信H5支付异步通知地址
+    'wxPay_h5_notify_path'  => 'api/payment/fwWxH5Notify',
 ];
